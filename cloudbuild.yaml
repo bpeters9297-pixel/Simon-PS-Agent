@@ -1,36 +1,12 @@
 steps:
-  # Build the container image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/$PROJECT_ID/simon-ps-consolidator', '.']
-
-  # Push the image to Container Registry
-  - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', 'gcr.io/$PROJECT_ID/simon-ps-consolidator']
-
-  # Deploy to Cloud Run
-  - name: 'gcr.io/cloud-builders/gke-deploy'
-    args:
-      - run
-      - --filename=.
-      - --image=gcr.io/$PROJECT_ID/simon-ps-consolidator
-      - --location=us-east4
-      - --namespace=default
-
-  # Alternative: use gcloud to deploy
+  # Deploy to Cloud Run using the buildpack image
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
       - 'deploy'
       - 'simon-ps-consolidator'
-      - '--image'
-      - 'gcr.io/$PROJECT_ID/simon-ps-consolidator'
-      - '--region'
-      - 'us-east4'
-      - '--platform'
-      - 'managed'
+      - '--source=.'
+      - '--region=us-east4'
+      - '--platform=managed'
       - '--allow-unauthenticated'
-      - '--set-env-vars'
-      - 'GOOGLE_CLOUD_PROJECT=$PROJECT_ID'
-
-images:
-  - 'gcr.io/$PROJECT_ID/simon-ps-consolidator'
+      - '--set-env-vars=GOOGLE_ENTRYPOINT=consolidate_ps'

@@ -15,7 +15,7 @@ def get_secret(secret_id):
 def consolidate_ps(request):
     try:
         secret_json = get_secret("simon-service-account-key")
-        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+        return {"statusCode": 200, "body": json.dumps({"message": "Success"})}
     except Exception as e:
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
 '''
