@@ -1,4 +1,6 @@
-import functions_framework
+"""Generate main.py with proper indentation"""
+
+code = '''import functions_framework
 import json
 from google.cloud import secretmanager
 
@@ -16,3 +18,9 @@ def consolidate_ps(request):
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
     except Exception as e:
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+'''
+
+with open('main.py', 'w') as f:
+    f.write(code)
+
+print("main.py generated successfully")
