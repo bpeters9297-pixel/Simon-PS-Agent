@@ -1,14 +1,20 @@
 steps:
-  # Deploy to Cloud Run using the pre-built buildpack image
+  # Deploy to Cloud Run
   - name: 'gcr.io/cloud-builders/gcloud'
     args:
       - 'run'
       - 'deploy'
       - 'simon-ps-consolidator'
-      - '--image=us-east5-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/simon-ps-agent/simon-ps-consolidator:$COMMIT_SHA'
-      - '--region=us-east4'
-      - '--platform=managed'
+      - '--image'
+      - 'us-east5-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/simon-ps-agent/simon-ps-consolidator:$COMMIT_SHA'
+      - '--region'
+      - 'us-east4'
+      - '--platform'
+      - 'managed'
       - '--allow-unauthenticated'
-      - '--set-env-vars=FUNCTION_TARGET=consolidate_ps'
-      - '--memory=256Mi'
-      - '--timeout=60'
+      - '--set-env-vars'
+      - 'GOOGLE_ENTRYPOINT=consolidate_ps'
+      - '--memory'
+      - '512Mi'
+      - '--timeout'
+      - '120'
