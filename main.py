@@ -16,3 +16,8 @@ def consolidate_ps(request):
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
     except Exception as e:
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
+
+if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 8080))
+    functions_framework.start(("0.0.0.0", port), debug=True, http_func=consolidate_ps)
