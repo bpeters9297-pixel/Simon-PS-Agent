@@ -43,29 +43,52 @@ app = Flask(__name__)
 @app.route('/')
 def trigger_consolidation():
     """Endpoint for Cloud Scheduler to trigger consolidation"""
+    print("=" * 80)
+    print("TRIGGER_CONSOLIDATION: Endpoint called by Cloud Scheduler")
+    print("=" * 80)
     result = consolidate()
+    print(f"TRIGGER_CONSOLIDATION: Returning result: {result}")
     return result
 
 def get_credentials():
     """Load service account credentials from environment"""
+    print("\n>>> GET_CREDENTIALS: Starting")
+    
     service_account_json = os.getenv('GOOGLE_CREDENTIALS')
+    print(f">>> GET_CREDENTIALS: GOOGLE_CREDENTIALS env var present: {bool(service_account_json)}")
 
-    if service_account_json:
-        service_account_info = json.loads(base64.b64decode(service_account_json))
-    else:
-        with open('/var/secrets/google/key.json', 'r') as f:
-            service_account_info = json.load(f)
+    try:
+        if service_account_json:
+            print(">>> GET_CREDENTIALS: Loading from base64-encoded env var")
+            service_account_info = json.loads(base64.b64decode(service_account_json))
+        else:
+            print(">>> GET_CREDENTIALS: Loading from /var/secrets/google/key.json")
+            with open('/var/secrets/google/key.json', 'r') as f:
+                service_account_info = json.load(f)
 
-    credentials = Credentials.from_service_account_info(
-        service_account_info,
-        scopes=['https://www.googleapis.com/auth/spreadsheets']
-    )
-    return credentials
+        print(f">>> GET_CREDENTIALS: Loaded service account for project: {service_account_info.get('project_id', 'UNKNOWN')}")
+        
+        credentials = Credentials.from_service_account_info(
+            service_account_info,
+            scopes=['https://www.googleapis.com/auth/spreadsheets']
+        )
+        print(">>> GET_CREDENTIALS: Credentials created successfully")
+        return credentials
+    except Exception as e:
+        print(f">>> GET_CREDENTIALS: ERROR - {str(e)}")
+        raise
 
 def build_sheets_service():
     """Build and return Sheets API service"""
-    credentials = get_credentials()
-    return build('sheets', 'v4', credentials=credentials)
+    print("\n>>> BUILD_SHEETS_SERVICE: Building Sheets API service")
+    try:
+        credentials = get_credentials()
+        service = build('sheets', 'v4', credentials=credentials)
+        print(">>> BUILD_SHEETS_SERVICE: Service built successfully")
+        return service
+    except Exception as e:
+        print(f">>> BUILD_SHEETS_SERVICE: ERROR - {str(e)}")
+        raise
 
 def sheet_exists(service, spreadsheet_id, sheet_name):
     """Check if a sheet exists"""
@@ -73,15 +96,18 @@ def sheet_exists(service, spreadsheet_id, sheet_name):
         result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         for sheet in result.get('sheets', []):
             if sheet['properties']['title'] == sheet_name:
+                print(f">>> SHEET_EXISTS: Sheet '{sheet_name}' found in spreadsheet")
                 return True
+        print(f">>> SHEET_EXISTS: Sheet '{sheet_name}' NOT found in spreadsheet")
         return False
     except Exception as e:
-        logger.error(f"Error checking sheet existence: {e}")
+        print(f">>> SHEET_EXISTS: ERROR checking {sheet_name}: {e}")
         return False
 
 def create_sheet(service, spreadsheet_id, sheet_name):
     """Create a new sheet"""
     try:
+        print(f">>> CREATE_SHEET: Creating sheet '{sheet_name}'")
         request = {
             'requests': [
                 {
@@ -97,10 +123,10 @@ def create_sheet(service, spreadsheet_id, sheet_name):
             spreadsheetId=spreadsheet_id,
             body=request
         ).execute()
-        logger.info(f"Created sheet: {sheet_name}")
+        print(f">>> CREATE_SHEET: Successfully created sheet '{sheet_name}'")
         return True
     except Exception as e:
-        logger.error(f"Error creating sheet: {e}")
+        print(f">>> CREATE_SHEET: ERROR creating {sheet_name}: {e}")
         return False
 
 def get_sheet_id_by_name(service, spreadsheet_id, sheet_name):
@@ -109,10 +135,13 @@ def get_sheet_id_by_name(service, spreadsheet_id, sheet_name):
         result = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
         for sheet in result.get('sheets', []):
             if sheet['properties']['title'] == sheet_name:
-                return sheet['properties']['sheetId']
+                sheet_id = sheet['properties']['sheetId']
+                print(f">>> GET_SHEET_ID: Found sheet ID {sheet_id} for '{sheet_name}'")
+                return sheet_id
+        print(f">>> GET_SHEET_ID: Sheet '{sheet_name}' not found")
         return None
     except Exception as e:
-        logger.error(f"Error getting sheet ID: {e}")
+        print(f">>> GET_SHEET_ID: ERROR for {sheet_name}: {e}")
         return None
 
 def get_last_row_with_data(service, spreadsheet_id, sheet_name):
@@ -124,30 +153,37 @@ def get_last_row_with_data(service, spreadsheet_id, sheet_name):
         ).execute()
 
         values = result.get('values', [])
-        return len(values) if values else 0
+        row_count = len(values) if values else 0
+        print(f">>> GET_LAST_ROW: Sheet '{sheet_name}' has {row_count} rows")
+        return row_count
     except Exception as e:
-        logger.error(f"Error getting row count for {sheet_name}: {e}")
+        print(f">>> GET_LAST_ROW: ERROR for {sheet_name}: {e}")
         return 0
 
 def get_new_rows(service, source_sheet_id, sheet_name, last_processed_row):
     """Get rows after last_processed_row"""
     try:
+        print(f">>> GET_NEW_ROWS: Fetching rows after row {last_processed_row} from '{sheet_name}'")
         result = service.spreadsheets().values().get(
             spreadsheetId=source_sheet_id,
             range=f"'{sheet_name}'!A{last_processed_row + 1}:Z1000"
         ).execute()
 
-        return result.get('values', [])
+        new_rows = result.get('values', [])
+        print(f">>> GET_NEW_ROWS: Found {len(new_rows)} new rows in '{sheet_name}'")
+        return new_rows
     except Exception as e:
-        logger.error(f"Error getting new rows from {sheet_name}: {e}")
+        print(f">>> GET_NEW_ROWS: ERROR fetching from {sheet_name}: {e}")
         return []
 
 def append_rows_to_master(service, sheet_name, rows):
     """Append rows to master sheet"""
     if not rows:
+        print(f">>> APPEND_ROWS: No rows to append for '{sheet_name}'")
         return None
 
     try:
+        print(f">>> APPEND_ROWS: Appending {len(rows)} rows to '{sheet_name}' in master sheet")
         result = service.spreadsheets().values().append(
             spreadsheetId=MASTER_SHEET_ID,
             range=f"'{sheet_name}'!A:Z",
@@ -155,18 +191,20 @@ def append_rows_to_master(service, sheet_name, rows):
             body={'values': rows}
         ).execute()
 
+        print(f">>> APPEND_ROWS: Successfully appended rows. Updated range: {result.get('updates', {}).get('updatedRange', 'N/A')}")
         return result
     except Exception as e:
-        logger.error(f"Error appending rows to {sheet_name}: {e}")
+        print(f">>> APPEND_ROWS: ERROR appending to {sheet_name}: {e}")
         return None
 
 def copy_formatting_for_rows(service, sheet_name, start_row_index, num_rows):
     """Copy formatting from row above to newly appended rows"""
     try:
+        print(f">>> COPY_FORMATTING: Copying formatting for {num_rows} rows starting at row {start_row_index}")
         sheet_id = get_sheet_id_by_name(service, MASTER_SHEET_ID, sheet_name)
 
         if sheet_id is None:
-            logger.warning(f"Could not find sheet ID for {sheet_name}")
+            print(f">>> COPY_FORMATTING: Could not find sheet ID for '{sheet_name}', skipping formatting")
             return
 
         # Copy formatting from the row above the new rows
@@ -195,12 +233,14 @@ def copy_formatting_for_rows(service, sheet_name, start_row_index, num_rows):
                 spreadsheetId=MASTER_SHEET_ID,
                 body={'requests': requests}
             ).execute()
+            print(f">>> COPY_FORMATTING: Successfully copied formatting for {num_rows} rows")
     except Exception as e:
-        logger.warning(f"Error copying formatting for {sheet_name}: {e}")
+        print(f">>> COPY_FORMATTING: WARNING - {e}")
 
 def load_tracking_log(service):
     """Load consolidation tracking log"""
     try:
+        print("\n>>> LOAD_TRACKING_LOG: Loading consolidation tracking log")
         result = service.spreadsheets().values().get(
             spreadsheetId=MASTER_SHEET_ID,
             range="'Consolidation Log'!A:D"
@@ -217,14 +257,16 @@ def load_tracking_log(service):
                 except (ValueError, IndexError):
                     continue
 
+        print(f">>> LOAD_TRACKING_LOG: Loaded {len(log)} tracking entries")
         return log
     except Exception as e:
-        logger.info(f"Consolidation log not accessible, starting fresh: {e}")
+        print(f">>> LOAD_TRACKING_LOG: Not accessible or empty, starting fresh: {e}")
         return {}
 
 def save_tracking_log(service, log):
     """Save consolidation tracking log"""
     try:
+        print(f"\n>>> SAVE_TRACKING_LOG: Saving {len(log)} tracking entries")
         rows = [['Team Member', 'Sheet Name', 'Last Processed Row', 'Last Updated']]
 
         for key, value in sorted(log.items()):
@@ -239,70 +281,103 @@ def save_tracking_log(service, log):
             valueInputOption='RAW',
             body={'values': rows}
         ).execute()
+        print(f">>> SAVE_TRACKING_LOG: Successfully saved tracking log")
     except Exception as e:
-        logger.error(f"Error saving tracking log: {e}")
+        print(f">>> SAVE_TRACKING_LOG: ERROR - {e}")
 
 def consolidate():
     """Main consolidation logic"""
-    service = build_sheets_service()
+    print("\n" + "=" * 80)
+    print("CONSOLIDATE: Main consolidation function started")
+    print("=" * 80)
+    
+    try:
+        print(">>> CONSOLIDATE: Building Sheets API service")
+        service = build_sheets_service()
+        print(">>> CONSOLIDATE: Service built successfully")
 
-    logger.info("Starting Production Summary consolidation...")
+        print("\n>>> CONSOLIDATE: Starting Production Summary consolidation...")
 
-    # Ensure Consolidation Log sheet exists
-    if not sheet_exists(service, MASTER_SHEET_ID, 'Consolidation Log'):
-        logger.info("Creating Consolidation Log sheet...")
-        create_sheet(service, MASTER_SHEET_ID, 'Consolidation Log')
+        # Ensure Consolidation Log sheet exists
+        print(">>> CONSOLIDATE: Checking if 'Consolidation Log' sheet exists")
+        if not sheet_exists(service, MASTER_SHEET_ID, 'Consolidation Log'):
+            print(">>> CONSOLIDATE: 'Consolidation Log' sheet does not exist, creating it...")
+            create_sheet(service, MASTER_SHEET_ID, 'Consolidation Log')
+        else:
+            print(">>> CONSOLIDATE: 'Consolidation Log' sheet already exists")
 
-    log = load_tracking_log(service)
-    consolidated_count = 0
+        print("\n>>> CONSOLIDATE: Loading tracking log")
+        log = load_tracking_log(service)
+        consolidated_count = 0
 
-    for team_member, source_sheet_id in TEAM_MEMBERS.items():
-        logger.info(f"Processing {team_member}'s workbook...")
+        print(f"\n>>> CONSOLIDATE: Processing {len(TEAM_MEMBERS)} team members")
+        for team_member, source_sheet_id in TEAM_MEMBERS.items():
+            print(f"\n>>> CONSOLIDATE: ========== Processing {team_member} ==========")
 
-        for sheet_name in CONSOLIDATED_TABS:
-            log_key = f"{team_member}_{sheet_name}"
-            last_processed_row = log.get(log_key, 0)
+            for sheet_name in CONSOLIDATED_TABS:
+                log_key = f"{team_member}_{sheet_name}"
+                last_processed_row = log.get(log_key, 0)
+                print(f">>> CONSOLIDATE: Processing {sheet_name} (last processed row: {last_processed_row})")
 
-            try:
-                # Get new rows from source
-                new_rows = get_new_rows(service, source_sheet_id, sheet_name, last_processed_row)
+                try:
+                    # Get new rows from source
+                    new_rows = get_new_rows(service, source_sheet_id, sheet_name, last_processed_row)
 
-                if new_rows:
-                    logger.info(f"Found {len(new_rows)} new rows in {team_member}/{sheet_name}")
+                    if new_rows:
+                        print(f">>> CONSOLIDATE: Appending {len(new_rows)} new rows from {team_member}/{sheet_name}")
 
-                    # Append to master
-                    result = append_rows_to_master(service, sheet_name, new_rows)
+                        # Append to master
+                        result = append_rows_to_master(service, sheet_name, new_rows)
 
-                    if result:
-                        # Update tracking log with current row count
-                        last_row_in_source = get_last_row_with_data(service, source_sheet_id, sheet_name)
-                        log[log_key] = last_row_in_source
-                        consolidated_count += len(new_rows)
+                        if result:
+                            # Update tracking log with current row count
+                            last_row_in_source = get_last_row_with_data(service, source_sheet_id, sheet_name)
+                            log[log_key] = last_row_in_source
+                            consolidated_count += len(new_rows)
 
-                        logger.info(f"Appended {len(new_rows)} rows to {sheet_name}. Updated tracking to row {last_row_in_source}")
+                            print(f">>> CONSOLIDATE: ✓ Successfully appended {len(new_rows)} rows. Updated tracking to row {last_row_in_source}")
 
-                        # Copy formatting from row above
-                        updated_range = result.get('updates', {}).get('updatedRange', '')
-                        if updated_range:
-                            try:
-                                range_parts = updated_range.split('!')
-                                if len(range_parts) > 1:
-                                    cell_range = range_parts[1].split(':')
-                                    if cell_range:
-                                        start_cell = cell_range[0]
-                                        start_row = int(''.join(c for c in start_cell if c.isdigit()))
-                                        copy_formatting_for_rows(service, sheet_name, start_row, len(new_rows))
-                            except Exception as e:
-                                logger.warning(f"Could not parse updated range: {updated_range}, {e}")
+                            # Copy formatting from row above
+                            updated_range = result.get('updates', {}).get('updatedRange', '')
+                            if updated_range:
+                                try:
+                                    range_parts = updated_range.split('!')
+                                    if len(range_parts) > 1:
+                                        cell_range = range_parts[1].split(':')
+                                        if cell_range:
+                                            start_cell = cell_range[0]
+                                            start_row = int(''.join(c for c in start_cell if c.isdigit()))
+                                            copy_formatting_for_rows(service, sheet_name, start_row, len(new_rows))
+                                except Exception as e:
+                                    print(f">>> CONSOLIDATE: WARNING - Could not parse updated range: {updated_range}, {e}")
+                        else:
+                            print(f">>> CONSOLIDATE: ✗ Failed to append rows to {sheet_name}")
 
-            except Exception as e:
-                logger.error(f"Error processing {team_member}/{sheet_name}: {e}")
-                continue
+                    else:
+                        print(f">>> CONSOLIDATE: No new rows in {sheet_name} (up to date)")
 
-    save_tracking_log(service, log)
+                except Exception as e:
+                    print(f">>> CONSOLIDATE: ✗ ERROR processing {team_member}/{sheet_name}: {e}")
+                    import traceback
+                    print(traceback.format_exc())
+                    continue
 
-    logger.info(f"Consolidation complete! Consolidated {consolidated_count} rows.")
-    return {'status': 'success', 'message': f'Consolidated {consolidated_count} rows'}
+        print(f"\n>>> CONSOLIDATE: Saving tracking log with {len(log)} entries")
+        save_tracking_log(service, log)
+
+        print("\n" + "=" * 80)
+        print(f"CONSOLIDATE: ✓ COMPLETE! Consolidated {consolidated_count} total rows.")
+        print("=" * 80)
+        
+        return {'status': 'success', 'message': f'Consolidated {consolidated_count} rows'}
+    
+    except Exception as e:
+        print("\n" + "=" * 80)
+        print(f"CONSOLIDATE: ✗ CRITICAL ERROR: {str(e)}")
+        print("=" * 80)
+        import traceback
+        print(traceback.format_exc())
+        return {'status': 'error', 'message': str(e)}
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
