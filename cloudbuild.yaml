@@ -13,7 +13,7 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--set-env-vars'
-      - 'GOOGLE_ENTRYPOINT=main'
+      - - 'GOOGLE_ENTRYPOINT=app'
       - '--memory'
       - '512Mi'
       - '--timeout'
