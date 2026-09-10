@@ -45,8 +45,6 @@ def trigger_consolidation():
     result = consolidate()
     return result
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
 def get_credentials():
 """Load service account credentials from environment"""
 service_account_json = os.getenv('GOOGLE_CREDENTIALS')
@@ -305,3 +303,5 @@ save_tracking_log(service, log)
 logger.info(f"Consolidation complete! Consolidated {consolidated_count} rows.")
 return {'status': 'success', 'message': f'Consolidated {consolidated_count} rows'}
 
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
