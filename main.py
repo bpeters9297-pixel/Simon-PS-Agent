@@ -305,9 +305,3 @@ save_tracking_log(service, log)
 logger.info(f"Consolidation complete! Consolidated {consolidated_count} rows.")
 return {'status': 'success', 'message': f'Consolidated {consolidated_count} rows'}
 
-def main():
-result = consolidate()
-print(json.dumps(result))
-
-if __name__ == '__main__':
-main()
