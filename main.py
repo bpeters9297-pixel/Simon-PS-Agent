@@ -35,7 +35,18 @@ CONSOLIDATED_TABS = [
 'Marketing Campaign Leads',
 'Monthly Attendance'
 ]
+from flask import Flask
 
+app = Flask(__name__)
+
+@app.route('/')
+def trigger_consolidation():
+    """Endpoint for Cloud Scheduler to trigger consolidation"""
+    result = consolidate()
+    return result
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
 def get_credentials():
 """Load service account credentials from environment"""
 service_account_json = os.getenv('GOOGLE_CREDENTIALS')
