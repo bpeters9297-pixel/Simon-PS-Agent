@@ -13,7 +13,7 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--set-env-vars'
-      - 'GOOGLE_ENTRYPOINT=consolidate_ps'
+      - 'GOOGLE_ENTRYPOINT=main'
       - '--memory'
       - '512Mi'
       - '--timeout'
